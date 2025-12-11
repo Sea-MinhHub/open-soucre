@@ -1,0 +1,195 @@
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+--// Fluent UI
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "Sea | Minh Hub",
+    SubTitle = "untitled tag game - Beta v1.0",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Aqua",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Player = Window:AddTab({ Title = "Player", Icon = "accessibility" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local scanEnabled = false
+
+--// Folder chứa object để quét
+local targetFolder = workspace:WaitForChild("playerHighlights")
+
+--// UI vòng tròn (như code bạn)
+local gui = Instance.new("ScreenGui")
+gui.Name = "CenterScanner"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local circle = Instance.new("Frame")
+circle.Size = UDim2.new(0, 12, 0, 12)
+circle.Position = UDim2.new(0.5, -6, 0.5, -6)
+circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+circle.BackgroundTransparency = 0.8
+circle.BorderSizePixel = 0
+circle.Parent = gui
+
+local uicorner = Instance.new("UICorner")
+uicorner.CornerRadius = UDim.new(1, 0)
+uicorner.Parent = circle
+
+local function scanCenter()
+    if not scanEnabled then 
+        circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        return 
+    end
+
+    local center = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+    local unitRay = camera:ViewportPointToRay(center.X, center.Y)
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Include
+    raycastParams.FilterDescendantsInstances = { targetFolder }
+
+    local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, raycastParams)
+
+    if not result then
+        circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        return
+    end
+
+    local part = result.Instance
+    local distance = (part.Position - camera.CFrame.Position).Magnitude
+
+    if distance <= 7 then
+        circle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+
+        -- Auto click
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.02)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+
+    else
+        circle.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end
+
+RunService.RenderStepped:Connect(scanCenter)
+
+Tabs.Main:AddToggle("autoclickontarget", {
+    Title = "auto click on target",
+    Default = false
+}):OnChanged(function(state)
+    scanEnabled = state
+end)
+
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+
+local SavedBrightness = Lighting.Brightness
+local IsFullBright = false
+
+-- Toggle FullBright
+local FullBrightToggle = Tabs.Player:AddToggle("FullBrightToggle", {
+    Title = "Full Bright",
+    Default = false,
+})
+
+FullBrightToggle:OnChanged(function(State)
+    IsFullBright = State
+
+    if State == true then
+        SavedBrightness = Lighting.Brightness
+
+        -- bật full bright ngay
+        Lighting.Brightness = 10
+        Lighting.ClockTime = 12
+        Lighting.GlobalShadows = false
+    else
+        -- trả lại sáng lưu
+        Lighting.Brightness = SavedBrightness
+        Lighting.GlobalShadows = true
+    end
+end)
+
+-- Slider Brightness
+local BrightnessSlider = Tabs.Player:AddSlider("BrightnessSlider", {
+    Title = "Brightness",
+    Description = "Adjust brightness",
+    Default = Lighting.Brightness,
+    Min = 0,
+    Max = 10,
+    Rounding = 1,
+})
+
+BrightnessSlider:OnChanged(function(Value)
+    Lighting.Brightness = Value
+    if not IsFullBright then
+        SavedBrightness = Value
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if IsFullBright then
+            -- Liên tục giữ sáng kể cả chết hoặc bị reset
+            Lighting.Brightness = 10
+            Lighting.ClockTime = 12
+            Lighting.GlobalShadows = false
+        end
+    end
+end)
+
+local UserInputService = game:GetService("UserInputService")
+local infiniteJump = false
+
+Tabs.Player:AddToggle("InfiniteJumpToggle", {
+    Title = "Infinite Jump",
+    Default = false
+}):OnChanged(function(state)
+    infiniteJump = state
+end)
+
+task.wait(1)
+
+if getconnections then
+    for _, c in ipairs(getconnections(game.Players.LocalPlayer.Idled)) do
+        c:Disable()
+    end
+    Fluent:Notify({ Title = "Anti Afk ", Content = "Anti Afk enabled you will not be banned.", Duration = 2 })
+else
+    Fluent:Notify({ Title = "Anti Afk ", Content = "Anti Afk cannot be turned on.", Duration = 2 })
+end
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+InterfaceManager:SetFolder("SeaMinhHubuntitledtaggame")
+SaveManager:SetFolder("SeaMinhHubuntitledtaggame/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "Sea | Minh Hub",
+    Content = "Aqua UI Loaded!",
+    Duration = 6
+})
+
+SaveManager:LoadAutoloadConfig()
